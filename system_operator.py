@@ -1,3 +1,4 @@
+import os
 from timestamps_module.timestamps_manager_file import TimestampsManager
 from containers_module.containers_manager_file import ContainersManager
 from ships_module.ships_manager_file import ShipsManager
@@ -107,7 +108,7 @@ class Operator:
 
         self.report_generator.stop_optimization()
 
-    def run(self, input_file="input/input.txt", log_dir="log", log_file="log.txt", optimizer_algorithm=None):
+    def run(self, input_file="input/input.txt", optimizer_algorithm=None):
         """
         Main function.
         :param input_file: a file (name) with input data
@@ -116,12 +117,15 @@ class Operator:
         :param optimizer_algorithm: a proposed optimizer algorithm number
         :return:
         """
-        with ReportGenerator(log_dir, log_file) as self.report_generator:
+        optimizer_algorithm_nr = self.select_optimizer_algorithm(optimizer_algorithm)
+        log_dir = f"{os.path.splitext(os.path.basename(input_file))[0]}_opt_{str(optimizer_algorithm_nr)}"
+        with ReportGenerator(log_dir) as self.report_generator:
             self.timestamps_manager = TimestampsManager()
             self.ships_manager = ShipsManager()
             self.containers_manager = ContainersManager()
 
-            self.optimizer = OptimizerSelector.select(self.select_optimizer_algorithm(optimizer_algorithm))
+            self.optimizer = OptimizerSelector.select(optimizer_algorithm_nr)
+            self.optimizer.report_generator = self.report_generator
             self.report_generator.start(self.ships_manager, self.containers_manager, self.optimizer)
 
             self.enter_data_from_file(input_file)
@@ -135,4 +139,4 @@ class Operator:
 
 if __name__ == "__main__":
     operator = Operator()
-    operator.run(input_file="input/input_t4.txt")
+    operator.run(input_file="input/input_t7.2.txt", optimizer_algorithm=2)

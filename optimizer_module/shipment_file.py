@@ -27,6 +27,19 @@ class Shipment:
                                              self.ship.width),
                                       dtype=np.int8)                        # map of occupancy; 0 if unoccupied, 1 if occupied
 
+    def copy(self, only_ship=False):
+        """
+        Return a copy of the current shipment.
+        :param only_ship: (bool) if True, return an empty copy with the current ship, else return a full copy
+        :return: a copy of the current shipment
+        """
+        sh = Shipment(ship=self.ship, containers_height=self.containers_height)
+        if not only_ship:
+            sh.placed_containers_levels = [x.copy() for x in self.placed_containers_levels]
+            sh.all_containers = self.all_containers.copy()
+            sh.occupancy_map = np.copy(self.occupancy_map)
+        return sh
+
     def to_string(self, get_list=True, get_map=True):
         """
         Create and return a string describing the shipment.
@@ -72,16 +85,24 @@ class Shipment:
                 max_used_level += 1
         return max_used_level
 
+    def get_full_volume(self, only_used_levels=False):
+        """
+        Get full volume of the ship.
+        :param only_used_levels: (bool) if True than include only information about used height levels
+        :return: full volume of the ship
+        """
+        if only_used_levels:
+            return self.containers_height * self.get_used_levels_nr() * self.ship.length * self.ship.width
+        else:
+            return self.ship.height * self.ship.length * self.ship.width
+
     def get_empty_volume(self, only_used_levels=False):
         """
         Get empty volume in the shipment.
         :param only_used_levels: (bool) if True than include only information about used height levels
         :return: empty volume in the shipment
         """
-        if only_used_levels:
-            full_volume = self.containers_height * self.get_used_levels_nr() * self.ship.length * self.ship.width
-        else:
-            full_volume = self.ship.height * self.ship.length * self.ship.width
+        full_volume = self.get_full_volume(only_used_levels)
         occupied_volume = np.sum(self.occupancy_map) * self.containers_height
         return full_volume - occupied_volume
 

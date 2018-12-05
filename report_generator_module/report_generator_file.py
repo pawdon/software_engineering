@@ -20,11 +20,12 @@ class ReportGenerator:
         :param if_log_to_file: (bool) if log to file
         :param if_print: (bool) if log using print
         """
-        self.if_log_to_file = if_log_to_file                # (bool) if log to file
-        self.if_print = if_print                            # (bool) if log using print
-        self.dirname = dirname                              # a directory in which logs will be created
-        self.filename = os.path.join(dirname, filename)     # a file to which logs will be written
-        self.logfile = None                                 # an opened log file
+        self.if_log_to_file = if_log_to_file                    # (bool) if log to file
+        self.if_print = if_print                                # (bool) if log using print
+        self.root = "log"                                       # a main directory for all logs
+        self.dirname = os.path.join(self.root, dirname)         # a directory in which logs will be created
+        self.filename = os.path.join(self.dirname, filename)    # a file to which logs will be written
+        self.logfile = None                                     # an opened log file
 
         self.start_datetime = None                          # start datetime
         self.stop_datetime = None                           # stop datetime
@@ -39,6 +40,8 @@ class ReportGenerator:
         Open a log file. Used automatically at the beginning of "with".
         :return: a report generator with opened log file
         """
+        if not os.path.exists(self.root):
+            os.mkdir(self.root)
         if os.path.exists(self.dirname):
             shutil.rmtree(self.dirname)
         os.mkdir(self.dirname)
@@ -284,7 +287,13 @@ class ReportGenerator:
         self.new_section()
         self.log("Report generating")
         sent_containers = sum([len(sh.get_all_containers()) for sh in self.shipments_list])
-        self.log(f"Sent {sent_containers} containers.")
+        self.log(f"Sent {sent_containers} containers in {len(self.shipments_list)} shipments.")
+        full_volume = sum([sh.get_full_volume() for sh in self.shipments_list])
+        empty_volume = sum([sh.get_empty_volume() for sh in self.shipments_list])
+        used_volume = full_volume - empty_volume
+        self.log(f"Used {round(100 * used_volume / full_volume, 2)}% of ships volume.")
+        self.log(f"Empty volume is {round(100 * empty_volume / used_volume, 2)}% of containers volume.")
+        self.log(f"Empty volume is about {int(empty_volume/100)} thous. ({empty_volume}).")
 
 
 def test():
