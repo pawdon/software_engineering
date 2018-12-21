@@ -1,11 +1,15 @@
 from datetime import datetime
+import numpy as np
 import os
-#import plotly
 import shutil
+import cv2
 
 from containers_module.containers_manager_file import ContainersManager, Container
 from ships_module.ships_manager_file import ShipsManager, Ship
-from optimizer_module.optimizer_file import OptimizerSelector, Shipment, PlacedContainer, CornerPosition
+from optimizer_module.shipments_manager_file import Shipment
+from optimizer_module.placed_container_file import PlacedContainer
+from optimizer_module.corner_position_file import CornerPosition
+from optimizer_module.optimizer_selector_file import OptimizerSelector
 
 
 class ReportGenerator:
@@ -90,22 +94,24 @@ class ReportGenerator:
         if self.indentation > 0:
             self.indentation -= 1
 
-    def log(self, text, additional_indent=0, new_section=False):
+    def log(self, text, additional_indent=0, new_section=False, temp_line=False):
         """
         Log a message.
         :param text: a message to log
         :param additional_indent: number of additional indentations
         :param new_section: (bool) if call new_section() at the beginning
+        :param temp_line: (bool) if True, the line will be only printed (not written to file) and will be overwritten by a next log
         :return:
         """
+        end = "\r" if temp_line else "\n"
         if new_section:
             self.new_section()
         for _ in range(additional_indent + self.indentation):
             text = "\t" + text
-        if self.if_log_to_file:
+        if self.if_log_to_file and not temp_line:
             self.logfile.write(text + "\n")
         if self.if_print:
-            print(text)
+            print(text, end=end)
 
     @staticmethod
     def datetime2str(x):
@@ -243,8 +249,10 @@ class ReportGenerator:
         :param shipment: a shipment
         :return: a string
         """
+        full_volume = shipment.get_full_volume()
+        empty_volume = shipment.get_empty_volume()
         return f"Shipment (ship = s{shipment.ship.sid}, " \
-               f"empty volume = {shipment.get_empty_volume()}, " \
+               f"empty volume = {empty_volume} ({round(100 * empty_volume / full_volume, 2)}% of full volume), " \
                f"containers number = {len(shipment.get_all_containers())}): " \
                f"{shipment.get_all_containers()}"
 
@@ -279,21 +287,183 @@ class ReportGenerator:
         self.decrease_indent()
         self.log("")
 
+    def draw_level_arrangement(self, img, placed_containers, scale=20, line_width=4, margin_value=32):
+        """
+        Draw arrangement of a single level
+        :param img: an image with lower levels
+        :param placed_containers: a list of placed containers
+        :param scale: a scale of an image
+        :param line_width: a line width
+        :param margin_value: a margin value
+        :return: an image with lower levels and the current one
+        """
+        used_color = [180, 230, 25]
+        used_lines_color = (int(used_color[0] / 2), int(used_color[1] / 2), int(used_color[2] / 2))
+        unused_color = [25, 60, 230]
+        margin_color = [40, 60, 100]
+        font = cv2.FONT_HERSHEY_SIMPLEX
+
+        img = np.repeat(img, scale, axis=0).astype(np.uint8)
+        img = np.repeat(img, scale, axis=1)
+
+        ones = np.ones_like(img, dtype=np.uint8)
+        used = np.dstack((used_color[0] * ones, used_color[1] * ones, used_color[2] * ones))
+        unused = np.dstack((unused_color[0] * ones, unused_color[1] * ones, unused_color[2] * ones))
+
+        img = np.dstack((img, img, img))
+        img = np.where(img == 1, used, unused)
+        shape = np.shape(img)
+        for pl_cont in placed_containers:
+            w1 = pl_cont.corner1.width * scale
+            l1 = pl_cont.corner1.length * scale
+            w2 = pl_cont.corner2.width * scale
+            l2 = pl_cont.corner2.length * scale
+            cv2.rectangle(img, (w1, l1), (w2, l2), used_lines_color, line_width)
+            if pl_cont.container.width > 5 and pl_cont.container.length > 5:
+                font_size = 2.0
+                thickness = 4
+            elif pl_cont.container.width > 2 and pl_cont.container.length > 2:
+                font_size = 1.0
+                thickness = 2
+            else:
+                font_size = 0.5
+                thickness = 1
+            cv2.putText(img, f"c{pl_cont.container.cid}", (w1 + line_width, l2 - line_width),
+                        font, font_size, used_lines_color, thickness, cv2.LINE_AA)
+
+        shift_margin = int(margin_value / 2)
+        full_img = np.ones(shape=(shape[0] + margin_value, shape[1] + margin_value), dtype=np.uint8)
+        full_img = np.dstack((margin_color[0] * full_img, margin_color[1] * full_img, margin_color[2] * full_img))
+        full_img[shift_margin:shift_margin + shape[0], shift_margin:shift_margin + shape[1], :] = img
+
+        return full_img
+
+    def draw_shipment_arrangement(self, shipment):
+        """
+        Draw arrangement of a single shipment.
+        :param shipment: a single shipment
+        :return: an image if an arrangement
+        """
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        img = self.draw_level_arrangement(shipment.occupancy_map[0], shipment.placed_containers_levels[0])
+
+        zeros = np.zeros(shape=(50, np.shape(img)[1], 3), dtype=np.uint8)
+        cv2.putText(zeros, f"s{shipment.ship.sid}", (5, 45), font, 2, (0, 220, 220), 8, cv2.LINE_AA)
+
+        img = np.vstack((img, zeros))
+        for i in range(1, shipment.levels_nr):
+            level_img = self.draw_level_arrangement(shipment.occupancy_map[i], shipment.placed_containers_levels[i])
+            img = np.vstack((level_img, img))
+        return img
+
+    def draw_arrangement(self):
+        """
+        Draw arrangement of all shipments.
+        :return:
+        """
+        length = len(self.shipments_list)
+        self.increase_indent()
+        for i, shipment in enumerate(self.shipments_list):
+            self.log(f"Draw a shipment {i+1}/{length}.")
+            shipment_img = self.draw_shipment_arrangement(shipment)
+            filename = os.path.join(self.dirname, f"arrangement_t{max(shipment.get_timestamps_set())}.png")
+            if os.path.exists(filename):
+                img = cv2.imread(filename)
+                img_h = np.shape(img)[0]
+                shipment_img_h = np.shape(shipment_img)[0]
+                if img_h > shipment_img_h:
+                    zeros = np.zeros(shape=(img_h - shipment_img_h, np.shape(shipment_img)[1], 3), dtype=np.uint8)
+                    shipment_img = np.vstack((zeros, shipment_img))
+                elif img_h < shipment_img_h:
+                    zeros = np.zeros(shape=(shipment_img_h - img_h, np.shape(img)[1], 3), dtype=np.uint8)
+                    img = np.vstack((zeros, img))
+                img = np.hstack((img, shipment_img))
+            else:
+                img = shipment_img
+            cv2.imwrite(filename, img)
+        self.decrease_indent()
+
     def generate_report(self):
         """
         Generate report.
         :return:
         """
         self.new_section()
-        self.log("Report generating")
+        self.log("Report generating\n")
+
+        self.log("Drawing images...")
+        self.draw_arrangement()
+
+        self.log("")
+        self.log("Report for ships")
+        ships_dict = {}
+        for shipment in self.shipments_list:
+            ship = shipment.ship
+            if ship in ships_dict.keys():
+                ships_dict[ship].append(shipment)
+            else:
+                ships_dict[ship] = [shipment]
+        for ship in ships_dict.keys():
+            shipments = ships_dict[ship]
+            available_volume = shipments[0].get_full_volume(only_used_levels=True)
+            full_volume = shipments[0].get_full_volume(only_used_levels=False)
+            unavailable = round(100 * (full_volume - available_volume) / full_volume, 2)
+            self.log(f"Ship {ship} was sent {len(shipments)} times. {unavailable}% of full volume is unavailable "
+                     f"due to const containers height.")
+            self.increase_indent()
+            for sh in shipments:
+                self.log(self.shipment2str(sh))
+            self.decrease_indent()
+
+        self.log("")
+        self.log("Summary")
         sent_containers = sum([len(sh.get_all_containers()) for sh in self.shipments_list])
         self.log(f"Sent {sent_containers} containers in {len(self.shipments_list)} shipments.")
+
         full_volume = sum([sh.get_full_volume() for sh in self.shipments_list])
         empty_volume = sum([sh.get_empty_volume() for sh in self.shipments_list])
         used_volume = full_volume - empty_volume
         self.log(f"Used {round(100 * used_volume / full_volume, 2)}% of ships volume.")
         self.log(f"Empty volume is {round(100 * empty_volume / used_volume, 2)}% of containers volume.")
         self.log(f"Empty volume is about {int(empty_volume/100)} thous. ({empty_volume}).")
+
+        self.log("")
+        self.log("If we skip a surplus of a height")
+        full_volume = sum([sh.get_full_volume(only_used_levels=True) for sh in self.shipments_list])
+        empty_volume = sum([sh.get_empty_volume(only_used_levels=True) for sh in self.shipments_list])
+        used_volume = full_volume - empty_volume
+        self.log(f"Used {round(100 * used_volume / full_volume, 2)}% of ships volume.")
+        self.log(f"Empty volume is {round(100 * empty_volume / used_volume, 2)}% of containers volume.")
+        self.log(f"Empty volume is about {int(empty_volume/100)} thous. ({empty_volume}).")
+
+
+def save_img(img, scale, filename, line_width=None):
+    if line_width is None:
+        line_width = int(scale / 10)
+    img = np.repeat(img, scale, axis=0)
+    img = np.repeat(img, scale, axis=1)
+    img = np.dstack((img, img, img))
+    img = (255 * img).astype(np.uint8)
+    shape = np.shape(img)
+    cv2.rectangle(img, (0, 0), (shape[1], shape[0]), (0, 0, 255), line_width)
+    cv2.imwrite(filename, img)
+
+
+def number2str(nr, length=6):
+    str_nr = str(nr)
+    while len(str_nr) < length:
+        str_nr = f"0{str_nr}"
+    return str_nr
+
+
+def test2():
+    print(number2str(2))
+    print(number2str(211))
+    a = np.array([[0, 1, 0, 0],
+                  [0, 1, 1, 0],
+                  [1, 0, 1, 0]])
+    print(a)
+    save_img(a, 100, "haha.png")
 
 
 def test():
@@ -332,7 +502,11 @@ def test():
                            uncompleted_shipment=sh4)
 
         rg.stop()
+        rg.log("haha", temp_line=True)
+        rg.log("b", temp_line=True)
 
 
 if __name__ == "__main__":
     test()
+    #print("\thaha", end="\r")
+    #print("\tb", end="\n")

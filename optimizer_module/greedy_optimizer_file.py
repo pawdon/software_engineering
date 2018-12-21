@@ -1,143 +1,70 @@
-import numpy as np
-import random
-#from .shipments_manager_file import ShipmentsManager, Shipment, PlacedContainer, CornerPosition
-from optimizer_module.shipments_manager_file import ShipmentsManager, Shipment, PlacedContainer, CornerPosition
+from .abstract_optimizer_file import IOptimizer
+from .shipments_manager_file import ShipmentsManager, Shipment, PlacedContainer, CornerPosition
 from containers_module.containers_manager_file import ContainersManager
 
 
-class OptimizerSelector:
-    @staticmethod
-    def select(nr=1):
-        optimizers = [IOptimizer, Optimizer1, Optimizer2]
-        return optimizers[nr]()
-
-    @staticmethod
-    def correct_algorithms_ids():
-        return [1, 2]
-
-
-class IOptimizer:
+class GreedyOptimizer(IOptimizer):
+    """
+    A greedy optimize class.
+    """
     def __init__(self):
-        self.shipments_manager = None
-        self.container_height = None
-        self.ships = None
-        self.containers = None
-        self.timestamp = None
-        self.previous_shipment = None
-        self.report_generator = None
-
-    @staticmethod
-    def info():
-        return "Abstract optimizer interface"
-
-    @staticmethod
-    def place_container(shipment, container, single_level=None):
-        if single_level is None:
-            empty_points = np.argwhere(shipment.occupancy_map == 0)
-        else:
-            empty_points = np.argwhere(shipment.occupancy_map[single_level] == 0)
-
-        for coordinates in empty_points:
-            if single_level is None:
-                h, l, w = coordinates
-            else:
-                h = single_level
-                l, w = coordinates
-
-            if shipment.check_and_add(PlacedContainer(container, CornerPosition(length=l, width=w, height_level=h))):
-                return True
-        return False
-
-    def optimize(self, ships, containers, timestamp, container_height, previous_shipment):
-        self.shipments_manager = ShipmentsManager(timestamp)
-        return self.shipments_manager
-
-
-class Optimizer1(IOptimizer):
-    def __init__(self):
-        super().__init__()
-
-    @staticmethod
-    def info():
-        return "Stupid optimizer"
-
-    def new_shipment(self):
-        ship = random.choice(self.ships)
-        shipment = Shipment(ship, containers_height=self.container_height)
-        return shipment
-
-    def optimize(self, ships, containers, timestamp, container_height, previous_shipment):
         """
-
-        :param ships:
-        :param containers:
-        :param timestamp:
-        :param container_height:
-        :param previous_shipment:
-        Sytuacja w której to jest użyte:
-        W poprzedniej turze mieliśmy duży fajny statek. Nie zapakowaliśmy go do końca, więc nie wysłaliśmy ostatniej
-        partii. Teraz nie mamy już tego statku. Okazało się, że nie jesteśmy w stanie wysłać naraz zalegających
-        kontenerów nowymi statkami, ale musimy to jakoś zrobić. W związku z tym wysyłamy tamten duży statek tak,
-        jak mogliśmy.
-        :return:
+        Constructor.
         """
-        self.container_height = container_height
-        self.containers = containers
-        self.ships = ships
-        self.timestamp = timestamp
-        self.previous_shipment = previous_shipment
-        self.shipments_manager = ShipmentsManager(timestamp)
-
-        use_previous_shipment = False
-
-        shipment = self.new_shipment()
-        for container in self.containers:
-            if use_previous_shipment:
-                if container in self.previous_shipment.get_all_containers():
-                    continue
-            if_success = self.place_container(shipment, container)
-            if not if_success:
-                if container.timestamp < self.timestamp:
-                    """
-                    To jest właśnie ta sytuacja
-                    """
-                    use_previous_shipment = True
-                    self.shipments_manager.check_and_add(self.previous_shipment)
-                else:
-                    self.shipments_manager.check_and_add(shipment)
-                    shipment = self.new_shipment()
-                    self.place_container(shipment, container)
-        self.shipments_manager.check_and_add(shipment)
-        return self.shipments_manager
-
-
-class Optimizer2(IOptimizer):
-    def __init__(self):
         super().__init__()
         self.sorted_containers = None
 
     @staticmethod
     def info():
+        """
+        Return a string with information describing the optimizer.
+        :return: a string with information describing the optimizer
+        """
         return "Greedy optimizer"
 
     @staticmethod
     def prioritize_containers(c):
+        """
+        A function defining how to sort containers.
+        :param c: a container
+        :return: a tuple of arguments used for comparing containers
+        """
         return c.timestamp, -(c.length * c.width)
 
-    def optimize_single_level(self, shipment, sorted_containers, single_level=None):
+    def optimize_single_level(self, shipment, sorted_containers, single_level=None, if_sort_by_width=False):
+        """
+        Place containers on a single level of a single ship in an optimal way.
+        :param shipment: a shipment with a ship
+        :param sorted_containers: a sorted list of containers
+        :param single_level: (int) a level number where to place containers (if None, place wherever)
+        :param if_sort_by_width: (bool) if True, sort empty points by width, else sort them by length
+        :return: None
+        """
         if single_level is None:
             single_level = shipment.get_used_levels_nr()
         for container in sorted_containers:
-            self.place_container(shipment, container, single_level)
+            self.place_container(shipment, container, single_level, if_sort_by_width)
 
-    def optimize_single_shipment(self, shipment, sorted_containers, check_urgent_containers=False, main_timestamp=None):
+    def optimize_single_shipment(self, shipment, sorted_containers,
+                                 check_urgent_containers=False,
+                                 main_timestamp=None,
+                                 if_sort_by_width=False):
+        """
+        Place containers on a single ship in an optimal way using a greedy algorithm.
+        :param shipment: a shipment with a ship
+        :param sorted_containers: a sorted list of containers
+        :param check_urgent_containers: (bool) if True, check timestamps of containers
+        :param main_timestamp: a main timestamp
+        :param if_sort_by_width: (bool) if True, sort empty points by width, else sort them by length
+        :return: a shipment with containers
+        """
         correct_shipment = True
 
         containers_copy = sorted_containers.copy()
         one_level_shipments = [shipment.copy(only_ship=True) for _ in range(shipment.levels_nr)]
         one_level_used = [False for _ in range(shipment.levels_nr)]
         for sh in one_level_shipments:
-            self.optimize_single_level(sh, containers_copy, single_level=0)
+            self.optimize_single_level(sh, containers_copy, single_level=0, if_sort_by_width=if_sort_by_width)
             for cont in sh.get_all_containers():
                 containers_copy.remove(cont)
         one_level_shipments.sort(key=lambda x: x.get_empty_volume(only_used_levels=True))
@@ -167,6 +94,12 @@ class Optimizer2(IOptimizer):
         return correct_shipment
 
     def check_and_add_shipment(self, shipment):
+        """
+        Check if a given shipment can be added to the shipments manager.
+        If so, do it and remove used containers from the list.
+        :param shipment: a shipment to add
+        :return: True if successfully added, else False
+        """
         success = self.shipments_manager.check_and_add(shipment)
         if success:
             for container in shipment.get_all_containers():
@@ -174,8 +107,13 @@ class Optimizer2(IOptimizer):
         return success
 
     def choose_and_add_shipment(self, shipments_list):
+        """
+        Add a shipment with the smallest relative empty volume to the shipments manager.
+        :param shipments_list: a list of shipments
+        :return: True if successfully added, else False
+        """
         success = False
-        shipments_list.sort(key=lambda x: x.get_empty_volume())
+        shipments_list.sort(key=lambda x: x.get_empty_volume() / x.get_full_volume())
         for sh in shipments_list:
             success = self.check_and_add_shipment(sh)
             if success:
@@ -184,18 +122,18 @@ class Optimizer2(IOptimizer):
 
     def optimize(self, ships, containers, timestamp, container_height, previous_shipment):
         """
-
-        :param ships:
-        :param containers:
-        :param timestamp:
-        :param container_height:
-        :param previous_shipment:
-        Sytuacja w której to jest użyte:
-        W poprzedniej turze mieliśmy duży fajny statek. Nie zapakowaliśmy go do końca, więc nie wysłaliśmy ostatniej
-        partii. Teraz nie mamy już tego statku. Okazało się, że nie jesteśmy w stanie wysłać naraz zalegających
-        kontenerów nowymi statkami, ale musimy to jakoś zrobić. W związku z tym wysyłamy tamten duży statek tak,
-        jak mogliśmy.
-        :return:
+        Place containers on ships in an optimal way.
+        :param ships: list of available ships
+        :param containers: a list container to place
+        :param timestamp: a main timestamp of containers
+        :param container_height: a constant height of containers
+        :param previous_shipment: the last (unsent) shipment returned by previous optimization
+                                  Situation when it is used:
+                                  During the latest optimization we had a big ship and we could place 100 containers
+                                  on it. We placed 75 containers and hoped we would place more so we didn't send
+                                  this shipment. Now the biggest ship can contain 50 containers. In this situation
+                                  we send the shipment based on the previous big ship.
+        :return: a shipment manager with list of shipment to send
         """
         self.container_height = container_height
         self.containers = containers
@@ -218,6 +156,9 @@ class Optimizer2(IOptimizer):
 
         if len(correct_first_shipments) == 0:
             if self.report_generator is not None:
+                """
+                That is the described situation when to use previous_shipment.
+                """
                 self.report_generator.log("CAN NOT SEND CONTAINERS WITH PREVIOUS TIMESTAMPS USING CURRENT SHIPS."
                                           "PREVIOUS SHIP IS USED")
             self.check_and_add_shipment(previous_shipment)
@@ -245,7 +186,7 @@ def test():
     cm.add("c13,1,2,2,3", min_timestamp=0)
     cm.add("c14,1,2,2,4", min_timestamp=0)
 
-    opt = Optimizer2()
+    opt = GreedyOptimizer()
     containers = cm.waiting_containers
     print(containers)
     s = sorted(containers, key=opt.prioritize_containers)
@@ -254,4 +195,3 @@ def test():
 
 if __name__ == "__main__":
     test()
-

@@ -50,7 +50,7 @@ class Ship:
         """
         Creates a ship from string and return it. Check only if the string can be split to correct number of ints.
         :param text: string in format s{id},{width},{height},{length}
-        :return: a ship
+        :return: a ship or None
         """
         if text[0] != "s":
             return None

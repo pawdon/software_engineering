@@ -3,7 +3,7 @@ from timestamps_module.timestamps_manager_file import TimestampsManager
 from containers_module.containers_manager_file import ContainersManager
 from ships_module.ships_manager_file import ShipsManager
 from report_generator_module.report_generator_file import ReportGenerator
-from optimizer_module.optimizer_file import OptimizerSelector
+from optimizer_module.optimizer_selector_file import OptimizerSelector
 
 
 class Operator:
@@ -139,4 +139,4 @@ class Operator:
 
 if __name__ == "__main__":
     operator = Operator()
-    operator.run(input_file="input/input_t7.2.txt", optimizer_algorithm=2)
+    operator.run(input_file="input/input_t4.txt", optimizer_algorithm=2)

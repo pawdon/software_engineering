@@ -51,7 +51,7 @@ class Container:
         """
         Creates a container from string and return it. Check only if the string can be split to correct number of ints.
         :param text: string in format c{id},{width},{height},{length},{timestamp}
-        :return: a container
+        :return: a container or None
         """
         if text[0] != "c":
             return None

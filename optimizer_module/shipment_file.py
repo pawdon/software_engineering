@@ -40,6 +40,17 @@ class Shipment:
             sh.occupancy_map = np.copy(self.occupancy_map)
         return sh
 
+    def load(self, shipment):
+        """
+        Load data from another shipment to this, if the ship is the same.
+        :param shipment: another.shipment
+        :return:
+        """
+        if self.ship == shipment.ship:
+            self.placed_containers_levels = [x.copy() for x in shipment.placed_containers_levels]
+            self.all_containers = shipment.all_containers.copy()
+            self.occupancy_map = np.copy(shipment.occupancy_map)
+
     def to_string(self, get_list=True, get_map=True):
         """
         Create and return a string describing the shipment.
@@ -96,6 +107,13 @@ class Shipment:
         else:
             return self.ship.height * self.ship.length * self.ship.width
 
+    def get_occupied_volume(self):
+        """
+        Get used volume in the shipment.
+        :return: used volume in the shipment
+        """
+        return np.sum(self.occupancy_map) * self.containers_height
+
     def get_empty_volume(self, only_used_levels=False):
         """
         Get empty volume in the shipment.
@@ -103,7 +121,7 @@ class Shipment:
         :return: empty volume in the shipment
         """
         full_volume = self.get_full_volume(only_used_levels)
-        occupied_volume = np.sum(self.occupancy_map) * self.containers_height
+        occupied_volume = self.get_occupied_volume()
         return full_volume - occupied_volume
 
     def get_all_containers(self):

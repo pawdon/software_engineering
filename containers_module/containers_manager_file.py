@@ -15,7 +15,7 @@ class ContainersManager:
         self.waiting_containers = []    # list of containers waiting for sending
         self.sent_containers = []       # list of sent containers
 
-        self.const_h = None
+        self.const_h = None             # constant height of containers
 
         # default values defining a correct container
         self.min_length = args.get("min_length", 1)

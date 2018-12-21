@@ -1,0 +1,31 @@
+Started at 2018.12.06 15:50:06
+
+****************************************************************************************************
+
+Ships settings:
+	Maximum number of available ships = 3
+	Acceptable length range = (50, 100)
+	Acceptable width range = (50, 100)
+	Acceptable height range = (50, 100)
+Containers settings:
+	Acceptable length range = (1, 40)
+	Acceptable width range = (1, 40)
+	Acceptable height range = (1, 40)
+Abstract optimizer interface
+
+****************************************************************************************************
+
+Sending containers for timestamp 39
+	Available ships: [Ship(s1,100,100,100), Ship(s2,100,100,100), Ship(s3,100,100,100)]
+	Completed shipments:
+		Shipment (ship = s1, empty volume = 999960 (100.0% of full volume), containers number = 2): [Container(c1,3,10,1,39), Container(c2,1,10,1,39)]
+		Shipment (ship = s2, empty volume = 999950 (100.0% of full volume), containers number = 2): [Container(c3,2,10,2,39), Container(c4,1,10,1,39)]
+		Shipment (ship = s1, empty volume = 998950 (99.9% of full volume), containers number = 1): [Container(c5,7,10,15,39)]
+	Uncompleted shipment:
+		Shipment (ship = s1, empty volume = 999990 (100.0% of full volume), containers number = 1): [Container(c6,1,10,1,39)]
+
+
+****************************************************************************************************
+
+Whole time = 0:00:00.001986
+Finished at 2018.12.06 15:50:06
