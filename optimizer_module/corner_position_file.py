@@ -26,6 +26,14 @@ class CornerPosition:
              "height": self.height_level}
         return f"{order[0]}={d[order[0]]},{order[1]}={d[order[1]]},{order[2]}={d[order[2]]}"
 
+    def to_str_with_real_dimensions(self, const_height):
+        """
+        Create a string from the corner position. The height level is scaled to real height. An order of dimensions
+        is like in input file.
+        :return: A string describing the corner position.
+        """
+        return f"{self.width},{self.height_level * const_height},{self.length}"
+
     def __str__(self):
         """
         Create a string from the corner position. Used when call print(corner position).

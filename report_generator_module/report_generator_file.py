@@ -1,4 +1,5 @@
 from datetime import datetime
+import json
 import numpy as np
 import os
 import shutil
@@ -242,8 +243,7 @@ class ReportGenerator:
         self.log(f"Optimization time = {str(delta_time)}")
         self.log(f"Finished optimization at {self.datetime2str(self.optimization_stop_datetime)}")
 
-    @staticmethod
-    def shipment2str(shipment):
+    def shipment2str(self, shipment):
         """
         Convert a shipment to a string.
         :param shipment: a shipment
@@ -251,10 +251,31 @@ class ReportGenerator:
         """
         full_volume = shipment.get_full_volume()
         empty_volume = shipment.get_empty_volume()
-        return f"Shipment (ship = s{shipment.ship.sid}, " \
+        try:
+            nr = f' nr {self.shipments_list.index(shipment)}'
+        except ValueError:
+            nr = ""
+        return f"Shipment{nr} (ship = s{shipment.ship.sid}, " \
                f"empty volume = {empty_volume} ({round(100 * empty_volume / full_volume, 2)}% of full volume), " \
                f"containers number = {len(shipment.get_all_containers())}): " \
-               f"{shipment.get_all_containers()}"
+               f"{['c' + str(c.cid) for c in shipment.get_all_containers()]}"
+
+    def save_shipment_as_json(self, shipment):
+        """
+        Save shipment with details to a json file.
+        :param shipment: a shipment
+        :return:
+        """
+        filename = f'shipment_{self.shipments_list.index(shipment)}.json'
+        data = {'ship': str(shipment.ship),
+                'containers': [],
+                'corners': []}
+        for level in shipment.placed_containers_levels:
+            for placed_container in level:
+                data['containers'].append(str(placed_container.container))
+                data['corners'].append(str(placed_container.corner1.to_str_with_real_dimensions(const_height=placed_container.container.height)))
+        with open(os.path.join(self.dirname, filename), 'w') as f:
+            json.dump(data, f, indent=4)
 
     def send_containers(self, timestamp, available_ships, completed_shipments, uncompleted_shipment=None):
         """
@@ -272,17 +293,18 @@ class ReportGenerator:
             first_shipment = completed_shipments[0]
             if first_shipment.ship not in available_ships:
                 completed_shipments = completed_shipments[1:]
-                self.log("Previous shipment:")
+                self.log(f"Previous shipment:")
                 self.log(self.shipment2str(first_shipment), additional_indent=1)
             if len(completed_shipments) > 0:
-                self.log("Completed shipments:")
+                self.log(f"Completed shipments:")
                 self.increase_indent()
                 for shipment in completed_shipments:
                     self.shipments_list.append(shipment)
                     self.log(self.shipment2str(shipment))
+                    self.save_shipment_as_json(shipment)
                 self.decrease_indent()
         if uncompleted_shipment is not None:
-            self.log("Uncompleted shipment:")
+            self.log(f"Uncompleted shipment:")
             self.log(self.shipment2str(uncompleted_shipment), additional_indent=1)
         self.decrease_indent()
         self.log("")

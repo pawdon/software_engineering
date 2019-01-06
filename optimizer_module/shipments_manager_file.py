@@ -26,7 +26,7 @@ class ShipmentsManager:
         result = f"ShipmentManager (timestamp = {self.main_timestamp}, " \
                  f"empty volume = {self.get_summary_empty_volume()})"
         for sh in self.shipments:
-            result += "\n" + sh.to_ordered_string(get_map=False)
+            result += "\n" + sh.to_string(get_map=False)
         return result
 
     def get_summary_empty_volume(self, only_used_levels=False):
